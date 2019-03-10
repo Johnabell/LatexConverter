@@ -1,6 +1,8 @@
+# LatexConverter
+
 Converts latex to OMML.
 
-Examples:
+## Examples:
 
 \begin{align*} 
     \int_{-\infity}^\infty e^{-x^2} dx = \sqrt{\pi}
