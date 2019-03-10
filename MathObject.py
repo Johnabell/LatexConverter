@@ -18,7 +18,7 @@ from itertools import groupby
 
 from lxml import etree
 
-import unicode_symbols as ucs
+import UnicodeSymbols as ucs
 
 #logging.basicConfig(level=logging.DEBUG)
 logging.basicConfig(filename='latex.log',level=logging.DEBUG)

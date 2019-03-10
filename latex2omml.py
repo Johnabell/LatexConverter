@@ -39,7 +39,7 @@ class LatexConverter:
         
     def convert(self, latex_input):
         logging.debug(latex_input)
-        latex_input = self.handle_nagwa_commands(latex_input)
+        latex_input = self.handle_custom_commands(latex_input)
         logging.debug(latex_input)
         mathml_string = l2m.latex_to_mathml(latex_input, name_space = True)
         print(mathml_string)
@@ -53,7 +53,7 @@ class LatexConverter:
  
         
     @staticmethod
-    def handle_nagwa_commands(latex):
+    def handle_custom_commands(latex):
         nagwa_commands = {
             'nagwaMatrix': 'pmatrix',
             'nagwaCases' : 'cases'
