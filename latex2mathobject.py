@@ -1,10 +1,12 @@
 import sys
 sys.path.append("/Users/johnbell/Dropbox (Nagwa)/Python/latex2omml/latex2mathml/")
 
-import converter as l2ml
+#import converter as l2ml
+import os
 import tokenizer as t
 import symbols_parser as sp
-import aggregator as ag
+import unicode_symbols as ucs
+#import aggregator as ag
 from lxml import etree
 import re
 import logging
@@ -24,12 +26,28 @@ mml2omml = 'MML2OMML2.xsl'
 logging.basicConfig(filename='latex.log',level=logging.DEBUG)
 Token = namedtuple('Token', ['type', 'value'])
 
-symbols = sp.parse_symbols()
+symbols2 = sp.parse_symbols()
+symbols = ucs.get_symbols()
 class MathObject:
     pass
 
 
 class MathElement:
+    type_dict = {
+        'mathpunct' : 'mo',
+        'mathord' : 'mi',
+        'mathopen' : 'mo', 
+        'mathclose' : 'mo',
+        'mathbin' : 'mo',
+        'mathalpha' : 'mi',
+        'mathrel' : 'mo',
+        'mathfence' : 'mo',
+        'mathaccent' : 'mo',
+        'mathop' : 'mo',
+        'mathradical' : 'mo',
+        'mathover' : 'mover',
+        'mathunder' : 'munder'
+    }
     
     def __init__(self, value = None, type = None, parent = MathObject):
         self.parent = weakref.ref(parent)
@@ -148,10 +166,20 @@ class MathElement:
     def lp_LEFT(self, i, token, token_tree):
         child = self.add_element('parentheses', 'LEFTRIGHT', ME_parentheses)
         i += 1
-        child.open = token_tree[i][0].value
+        paren = token_tree[i][0].value
+        if paren.startswith('\\'):
+            paren = paren[1:]
+        elif paren == '.':
+            paren = ' '
+        child.open = paren
         child.parse_token_tree(token_tree[i][1:])
         i += 2
-        child.close = token_tree[i].value
+        paren = token_tree[i].value
+        if paren.startswith('\\'):
+            paren = paren[1:]
+        elif paren == '.':
+            paren = ' '
+        child.close = paren
         return i
         
     def lp_FRAC(self, i, token, token_tree):
@@ -162,6 +190,17 @@ class MathElement:
         den.parse_token_tree(token_tree[i+2])        
         return i + 2
         
+    def lp_MATHFONT(self, i, token, token_tree):
+        
+        child = self.add_element(token.value, token.type, ME_mathfont)
+        return i
+        
+    def lp_TEXT(self, i, token, token_tree):
+        text = re.findall(r'\\text\w*\{([^}]*)\}', token.value)[0]
+        child = self.add_element(text, token.type, ME_text)
+        return i
+        
+    
     def lp_ROOT(self, i, token, token_tree):
         child = self.add_element(token.value, token.type, ME_root)
         child.index = re.findall(r'\\sqrt\[(.*)]', token.value)[0]
@@ -182,7 +221,7 @@ class MathElement:
             parent = self.add_element('blank', MathElement)
         i += 1
         parent.add_sub('sub', MathElement)
-        print(i, token_tree[i])
+        #print(i, token_tree[i])
         parent.sub.parse_token_tree(token_tree[i])
         try:
             next = token_tree[i+1]  
@@ -203,7 +242,7 @@ class MathElement:
             parent = self.add_element('blank', MathElement)
         i += 1
         parent.add_sup('sup', MathElement)
-        print(i, token_tree[i])
+        #print(i, token_tree[i])
         parent.sup.parse_token_tree(token_tree[i])
         try:
             next = token_tree[i+1]  
@@ -297,40 +336,77 @@ class MathElement:
         else:
             return None
     
+class ME_mathfont(MathElement):
+    @MathElement._check_parent
+    @MathElement._sub_sup_ml
+    def to_mathml(self, parent = None):
+        elem = etree.SubElement(parent, 'mi')
+        prefix, text = self.value[:-1].split('{')
+        out = ''
+        #print(prefix, t)
+        for part in re.findall(r'\\\w*|\w', text):
+            try:
+                unicode, char, type = symbols[prefix + '{' + part + '}']
+            except KeyError:
+                char = part
+            out += char
+                
+        elem.text = out
+        return elem
+
+class ME_text(MathElement):
+    @MathElement._check_parent
+    @MathElement._sub_sup_ml
+    def to_mathml(self, parent = None):
+        elem = etree.SubElement(parent, 'mtext')
+        elem.text = self.value
+        return elem
+
 class ME_math_parentheses(MathElement):
     @MathElement._run_on_children
     @MathElement._check_parent
     @MathElement._sub_sup_ml
     def to_mathml(self, parent):
-        elem = etree.SubElement(parent, 'mo')
-        elem.set('fence', 'true')
         try:
-            elem.text = chr(int(symbols[self.value],16))
+            unicode, char, type = symbols[self.value]
+            cat = self.type_dict[type]
         except KeyError:
-            elem.text = self.value[1:] + '!!!!!!!!'
+            char = self.value[1:]
+            cat = 'mo'
+            
+        elem = etree.SubElement(parent, cat)
+        elem.set('fence', 'true')
+        elem.text = char
         return elem
 
 class ME_command(MathElement):
     @MathElement._check_parent
     @MathElement._sub_sup_ml
     def to_mathml(self, parent = None):
-        elem = etree.SubElement(parent, 'mi')
         try:
-            elem.text = chr(int(symbols[self.value],16))
+            unicode, char, type = symbols[self.value]
+            cat = self.type_dict[type]
         except KeyError:
-            elem.text = self.value[1:] + '!!!!!!!!'
+            char = self.value[1:]
+            cat = 'mi'
+            
+        elem = etree.SubElement(parent, cat)
+        elem.text = char
         return elem
         
 class ME_symbol(MathElement):
     @MathElement._check_parent
     @MathElement._sub_sup_ml
     def to_mathml(self, parent = None):
-        #handle mo
-        elem = etree.SubElement(parent, 'mi')
         try:
-            elem.text = chr(int(symbols[self.value],16))
+            unicode, char, type = symbols[self.value]
+            cat = self.type_dict[type]
         except KeyError:
-            elem.text = self.value + #'!!!!!!!!'
+            char = self.value[1:]
+            cat = 'mo'
+            
+        elem = etree.SubElement(parent, cat)
+        elem.text = char
         return elem
  
         
@@ -347,7 +423,7 @@ class ME_parentheses(MathElement):
         elem = etree.SubElement(parent, 'mfenced')
         elem.set('open', self.open)
         elem.set('close', self.close)
-        elem.set('seperator', '')
+        elem.set('separators', '')
         row = etree.SubElement(elem, 'mrow')
         return row
 
@@ -380,7 +456,7 @@ class ME_line(MathElement):
     @MathElement._run_on_children
     @MathElement._check_parent
     def to_mathml(self, parent):
-        elem = etree.SubElement(parent, 'mtd')
+        elem = etree.SubElement(parent, 'mtr')
         return elem
     
     
@@ -388,7 +464,7 @@ class ME_alignment_blocks(MathElement):
     @MathElement._run_on_children
     @MathElement._check_parent
     def to_mathml(self, parent):
-        elem = etree.SubElement(parent, 'mtr')
+        elem = etree.SubElement(parent, 'mtd')
         row = etree.SubElement(elem, 'mrow')
         align = etree.SubElement(row, 'maligngroup')
         return row
@@ -435,27 +511,71 @@ class ME_frac(MathElement):
         return elem
     
 class ME_environment(MathElement):
+    matrix_paren = {
+        'pmatrix' : ('(', ')'),
+        'bmatrix' : ('[', ']'),
+        'Bmatrix' : ('{', '}'),
+        'vmatrix' : ('|', '|'),
+        'Vmatrix' : ('‖', '‖'),
+        }
+    
     def __init__(self, *args, **kwrds):
         super().__init__(*args, **kwrds)
         self.rows = [[]]
         self.group_name = 'row'
         self.default_group_class = ME_row
     
+    def _handle_paren(func):
+        """
+        Decorator to add parentheses to the matrix
+        """
+        @wraps(func)
+        def wrapper(self, parent, *args, **kwrds):
+            if self.value in self.matrix_paren.keys():
+                paren = self.matrix_paren[self.value]
+                open = etree.SubElement(parent, 'mo')
+                open.text = paren[0]
+                result = func(self, parent, *args, **kwrds)
+                close = etree.SubElement(parent, 'mo')
+                close.text = paren[1]
+            else: 
+                result = func(self, *args, **kwrds)
+            return result
+        return wrapper
+    
+    #@_handle_paren
     @MathElement._run_on_children
     @MathElement._check_parent    
     def to_mathml(self, parent):
+        if self.value in self.matrix_paren.keys():
+            paren = self.matrix_paren[self.value]
+            parent = etree.SubElement(parent, 'mfenced')
+            parent.set('open', paren[0])
+            parent.set('close', paren[1])
+            parent.set('separators', '')
+            
+        
         elem = etree.SubElement(parent, 'mtable')
+        
+        
         #alignement handeling
         
         return elem
         
+    
     
 class ME_align(ME_environment):
     def __init__(self, *args, **kwrds):
         super().__init__(*args, **kwrds)
         self.group_name = 'line'
         self.default_group_class = ME_line
-  
+
+    @MathElement._run_on_children
+    @MathElement._check_parent    
+    def to_mathml(self, parent):
+        elem = etree.SubElement(parent, 'mtable')
+        
+        return elem
         
 class ME_root(MathElement):
     def __init__(self, *args, **kwrds):
@@ -503,6 +623,8 @@ def tokenizer(latex, ignore_types = ['WS']):
             r'(?P<END>\\end\{[^}]*\})',
             r'(?P<NL>\\\\)',
             r'(?P<MP>\\[{}|])',
+            r'(?P<TEXT>\\text\w*\{[^}]*\})',
+            r'(?P<MATHFONT>\\math\w*\{[^}]*})',
             r'(?P<GB>\{)',
             r'(?P<GE>\})',
             r'(?P<ROOT>\\sqrt\[([^]]*)\])',
@@ -531,13 +653,22 @@ def parse_latex(latex):
     tokens = tokenizer(latex, ignore_tags)
     root = MathElement()
     token_tree = _group(tokens)
-    pprint.pprint(token_tree)
+    #pprint.pprint(token_tree)
     #math_object = build_math_object(token_tree, MathElement())
     root.parse_token_tree(token_tree)
-    root.pprint()
+    #root.pprint()
     print(etree.tostring(root.to_mathml(), pretty_print=True, encoding='unicode'))
-    print('ran_sucessfully')
-    return token_tree
+    #print('ran_sucessfully')
+    return root
+    
+def latex_to_mathml(latex, name_space = True):
+    math = etree.Element('math')
+    if name_space:
+        math.set('xmlns', "http://www.w3.org/1998/Math/MathML")
+    root = parse_latex(latex)
+    elem = root.to_mathml()
+    math.append(elem)
+    return math
     
 def _group(tokens):
     begin_group_tokens = ['GB', 'BEG', 'LEFT', 'MM_B_ALIGN']
@@ -590,8 +721,87 @@ def ppmathml(mathml, type = 'string'):
     return pp
 
 
+class MathML_Validator:
+    schema_path = 'mathml2'
+    schema_file = 'mathml2.dtd'
+    
+    def __init__(self):
+        current_path = sys.path[0]
+        DTD_location = os.path.join(current_path, self.schema_path, self.schema_file)
+        self.DTD = etree.DTD(DTD_location)
+        
+    def validate_from_etree(self, tree):
+        result = self.DTD.validate(tree)
+        log = self.DTD.error_log
+        error = log.last_error
+        self.DTD._clear_error_log()
+        return result, log.last_error
+    
+    def validate_from_string(self, string):
+        tree = etree.fromstring(mathml)
+        self.validate_from_etree(tree)
+        
+
+def validator(mathml):
+    schema_path = 'mathml2'
+    schema_file = 'mathml2.dtd'
+    current_path = sys.path[0]
+    schema_location = os.path.join(current_path, schema_path, schema_file)
+    DTD = etree.DTD(schema_location)
+    #xmlschema = etree.XMLSchema(xmlschema_doc)
+#     
+    mathml = """
+        
+        <mrow>
+  <mtable>
+    <mtd>
+      <mtr>
+        <mrow>
+          <maligngroup/>
+          <msubsup>
+            <mi>∫</mi>
+            <mn>1</mn>
+            <mi>∞</mi>
+          </msubsup>
+          <mi>sin!!!!!!!!</mi>
+          <mfenced open="(" close=")" seperator="">
+            <mrow>
+              <mi>θ</mi>
+            </mrow>
+          </mfenced>
+          <mi>d</mi>
+          <mi>x</mi>
+          <mi>=</mi>
+          <mn>5</mn>
+        </mrow>
+      </mtr>
+    </mtd>
+    <mtd>
+      <mtr>
+        <mrow>
+          <maligngroup/>
+          <mi>x</mi>
+          <mi>=</mi>
+          <mn>4</mn>
+        </mrow>
+      </mtr>
+    </mtd>
+  </mtable>
+</mrow>
+
+"""
+    #parser = etree.XMLParser(dtd_validation=True)
+    
+    doc2 = etree.fromstring(mathml)
+    result = DTD.validate(doc2)
+    log = DTD.error_log
+    return result, log.last_error
+    
+
 def _test_parser():
     test_batch = [
+        r'f(x) = \left\{ \begin{array}{c} x^2 \text{ if }  x > 0, \\ 0 \text{ if } x \leq 0 \end{array}\right.',
+        r'x \in \mathbb{RC  \Gamma}',
         r"\begin{align*} \int_1^\infty \sin \left(\theta\right)dx = 5 \\ x = 4\end{align*}",
         r"""\begin{array}{c}
             a  b  c \\
@@ -619,6 +829,7 @@ def _test_parser():
             \end{bmatrix}""",
         r'\begin{matrix} 1 & -\sqrt[3]{2} \end{matrix}'
     ]
+    check = MathML_Validator()
     summary = []
     for i, latex_input in enumerate(test_batch):
         print(('*' * 50) + '  Start of Test {} '.format(i+1) + ('*' * 50))
@@ -629,9 +840,11 @@ def _test_parser():
         try:
             print('Tokenizer output : ', [t for t in tokenizer(latex_input)])
             print('Parser output: ')
-            parse_latex(latex_input)
+            mathobject = parse_latex(latex_input)
+            valid, log = check.validate_from_etree(mathobject.to_mathml())
+            print('Validator result', valid, log,)
             print(('+' * 50) + '  Test Success  ' + ('+' * 50))
-            summary.append('{} - Success for latex input -  "{}"'.format(i+1, latex_input))
+            summary.append('{} - Success for latex input -  "{}" \n\t Valid mathml: - {} \t Error log : - {}'.format(i+1, latex_input, valid, log))
         except Exception as e:
             exc_info = sys.exc_info()
             print(('-' * 50) + '  Test Failure  ' + ('-' * 50))
@@ -710,13 +923,7 @@ def _test_mathml():
 #     print(etree.tostring(omml_tree.getroot(), pretty_print=True, encoding='unicode'))
 
 def _test_2():
-    latex = r'$3x\left[x+\left(y-x\right)\right]+y\left[2y+2\left(x-y\right)\right]$'
-    
-    symbols = sp.parse_symbols()
-    agre = ag.aggregate(latex)
-    print(agre)
-    #for k,v in symbols.items():
-        #print(k,v)
+    print(symbols[r'\quad'])
     
 if __name__ == '__main__':
     #_test_2()
