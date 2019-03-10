@@ -65,7 +65,7 @@ class LatexConverter:
 
 def _test_mathml():
     test_batch = [
-        r"\begin{align*} \int_1^\infty \sin \left(\theta\right)dx = 5 \\ x = 4\end{align*}",
+        r"\begin{align*} \int_{-\infity}^\infty e^{-x^2} dx = \sqrt{\pi}\end{align*}",
         r"""\begin{array}{c}
             a  b  c \\
             d  e  f \\
