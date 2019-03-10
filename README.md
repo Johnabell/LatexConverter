@@ -3,11 +3,22 @@
 Converts latex to OMML.
 
 ## Examples:
-
+<table>
+    <tr>
+        <th> Latex </th>
+        <th> OMML </th>
+    </tr>
+    <tr>
+        <td>
+            <pre lang="latex">
 \begin{align*} 
     \int_{-\infity}^\infty e^{-x^2} dx = \sqrt{\pi}
 \end{align*}
-
+            </pre>
+        </td>
+        <td>
+            <pre lang='xml'>
+    
 <m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" xmlns:mml="http://www.w3.org/1998/Math/MathML">
   <m:eqArr>
     <m:e>
@@ -78,13 +89,23 @@ Converts latex to OMML.
     </m:e>
   </m:eqArr>
 </m:oMath>
-
+            </pre>
+        </td>
+    </tr>
+    <tr>
+        <td>
+            <pre lang='latex'>
 \begin{bmatrix}
-     a_{1,1} & a_{1,2} & \cdots & a_{1,n} \\
-     a_{2,1} & a_{2,2} & \cdots & a_{2,n} \\
-     \vdots  & \vdots  & \ddots & \vdots  \\
-     a_{m,1} & a_{m,2} & \cdots & a_{m,n} 
+    a_{1,1} & a_{1,2} & \cdots & a_{1,n} \\
+    a_{2,1} & a_{2,2} & \cdots & a_{2,n} \\
+    \vdots  & \vdots  & \ddots & \vdots  \\
+    a_{m,1} & a_{m,2} & \cdots & a_{m,n} 
 \end{bmatrix}
+            </pre>
+        </td>
+        <td>
+            <pre lang='xml'>
+    
 
 <m:oMath xmlns:m="http://schemas.openxmlformats.org/officeDocument/2006/math" xmlns:mml="http://www.w3.org/1998/Math/MathML">
   <m:d>
@@ -280,3 +301,7 @@ Converts latex to OMML.
     </m:e>
   </m:d>
 </m:oMath>
+            </pre>
+        </td>
+    </tr>
+</table>
